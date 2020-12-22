@@ -7,29 +7,37 @@ void worker1(void* arg) {
     uint32_t now = get_clock_ms();
     for(;;) {
         PORTB |= (1<<5);
-        yield_until(now+=200);
+        sleep_until(now+=200);
         PORTB &= ~(1<<5);
-        yield_until(now+=800);
+        sleep_until(now+=800);
+    }
+}
+
+void worker3(void* arg);
+
+struct worker3_arg {
+    uint16_t pause_ms;
+    uint16_t signal_ms;
+};
+
+void worker2(void* arg) {
+    uint32_t now = get_clock_ms();
+    struct worker3_arg warg = { 50, 50 };
+    for(;;) {
+        PORTB |= (1<<2);
+        sleep_until(now+=300);
+        PORTB &= ~(1<<2);
+        sleep_until(now+=600);
+        spawn(worker3, &warg);
     }
 }
 
 void worker3(void* arg) {
-    uint32_t now = get_clock_ms();
-    yield_until(now+=50);
+    struct worker3_arg arg_copy = *(struct worker3_arg*)arg;
+    sleep_ms(arg_copy.pause_ms);
     PORTB |= (1<<0);
-    yield_until(now+=50);
+    sleep_ms(arg_copy.signal_ms);
     PORTB &= ~(1<<0);
-}
-
-void worker2(void* arg) {
-    uint32_t now = get_clock_ms();
-    for(;;) {
-        PORTB |= (1<<2);
-        yield_until(now+=300);
-        PORTB &= ~(1<<2);
-        yield_until(now+=600);
-        spawn(worker3, 0);
-    }
 }
 
 int main() {

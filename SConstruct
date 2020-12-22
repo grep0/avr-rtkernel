@@ -10,6 +10,7 @@ env['OBJCOPY'] = 'avr-objcopy'
 env['OBJDUMP'] = 'avr-objdump'
 env['SIZE'] = 'avr-size'
 env['AVRDUDE'] = 'avrdude'
+# -fno-inline for better debugging, to be removed
 env.Append(CCFLAGS = '-O1 -Wall -flto -g -fno-inline')
 env.Append(LINKFLAGS = '-g')
 

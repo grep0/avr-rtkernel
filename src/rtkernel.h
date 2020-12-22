@@ -21,6 +21,9 @@ void yield();
 // Yield, run the specified thread next if it's ready.
 void yield_to(thread_id id);
 // Sleep until given time (ms since program start)
-void yield_until(uint32_t ms);
+void sleep_until(uint32_t ms);
+// Sleep for x milliseconds
+void sleep_ms(uint16_t ms);
+void sleep_ms_long(uint32_t ms);
 
 #endif

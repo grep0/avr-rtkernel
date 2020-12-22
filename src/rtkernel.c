@@ -15,6 +15,13 @@ enum {
     T_SLEEPING = 0x4,
 };
 
+struct jmpbuf_internals {
+    uint8_t call_saved_regs[18];  // r2-r17,r28,r29
+    uint16_t sp;  // SPH:SPL
+    uint8_t sreg;
+    uint16_t return_addr;
+} __attribute__((packed));
+
 jmp_buf thread_jmp[NUM_THREADS];
 uint8_t thread_state[NUM_THREADS];
 uint32_t thread_sleep_deadline[NUM_THREADS];
@@ -31,9 +38,12 @@ enum {
 
 static bool thread_is_ready(thread_id tid, uint32_t clk) {
     uint8_t t_flags =  thread_state[tid];
-    if (!(t_flags & T_USED)) return false;
+    if (!(t_flags & T_USED)) {
+        return false;
+    }
     if (t_flags & T_SLEEPING) {
-        if (thread_sleep_deadline[tid] <= clk) {
+        // Rollover-safe way to compare
+        if (!((thread_sleep_deadline[tid]-clk)&0x80000000UL)) {
             thread_state[tid] &= ~T_SLEEPING;
             return true;
         }
@@ -42,10 +52,23 @@ static bool thread_is_ready(thread_id tid, uint32_t clk) {
     return true;
 }
 
+#define STACK_SENTINEL 0x5A
+static void verify_stack(thread_id tid) {
+    struct jmpbuf_internals* jbuf = (struct jmpbuf_internals*)(thread_jmp[tid]);
+    // SP is within the limits
+    assert(jbuf->sp >= (uint16_t)thread_stack[tid] && jbuf->sp < (uint16_t)thread_stack[tid] + THREAD_STACK_SIZE);
+    // and sentinels are there
+    assert(thread_stack[tid][0] == STACK_SENTINEL && thread_stack[tid][THREAD_STACK_SIZE-1] == STACK_SENTINEL);
+}
+
 void start_kernel() {
+    assert(sizeof(struct jmpbuf_internals) == sizeof(jmp_buf));
     assert(current_tid == 0xFF);
     int kj = setjmp(jmp_kernel);
     if (kj != 0) {
+        if (current_tid < NUM_THREADS) {
+            verify_stack(current_tid);
+        }
         if (kj == KJ_FREEZE) {
             // freeze current task
             if (current_tid < NUM_THREADS) {
@@ -111,18 +134,19 @@ void yield_to(thread_id tid) {
     }
 }
 
-void yield_until(uint32_t ms) {
+void sleep_until(uint32_t ms) {
     thread_state[current_tid] |= T_SLEEPING;
     thread_sleep_deadline[current_tid] = ms;
     yield();
 }
 
-struct jmpbuf_internals {
-    uint8_t call_saved_regs[18];  // r2-r17,r28,r29
-    uint16_t sp;  // SPH:SPL
-    uint8_t sreg;
-    uint16_t return_addr;
-} __attribute__((packed));
+void sleep_ms(uint16_t ms) {
+    sleep_until(get_clock_ms() + ms);
+}
+
+void sleep_ms_long(uint32_t ms) {
+    sleep_until(get_clock_ms() + ms);
+}
 
 void spawn_trampoline() __attribute__((naked));
 
@@ -137,8 +161,11 @@ thread_id spawn(entry_point_t fn, void* arg) {
     }
     // Set up jmpbuf to start
     struct jmpbuf_internals* jbuf = (struct jmpbuf_internals*)(thread_jmp[new_tid]);
+    // Set stack sentinel
+    thread_stack[new_tid][0] = STACK_SENTINEL;
+    thread_stack[new_tid][THREAD_STACK_SIZE-1] = STACK_SENTINEL;
     jbuf->sreg = SREG;
-    jbuf->sp = (uint16_t)(&thread_stack[new_tid][THREAD_STACK_SIZE-1]);
+    jbuf->sp = (uint16_t)(&thread_stack[new_tid][THREAD_STACK_SIZE-2]);
     jbuf->return_addr = (uint16_t)(void*)(&spawn_trampoline);
     jbuf->call_saved_regs[16] = ((uint16_t)fn & 0xFF);  // r28
     jbuf->call_saved_regs[17] = ((uint16_t)fn >> 8);    // r29

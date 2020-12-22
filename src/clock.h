@@ -13,7 +13,5 @@
 void setup_timer();
 // Get millisecond clock since startup (overflows in ~49.7 days)
 uint32_t get_clock_ms();
-// Sleep (precision ~1 ms)
-void sleep_ms(uint32_t ms);
 
 #endif
