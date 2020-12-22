@@ -1,0 +1,11 @@
+Import('env')
+
+sources = [
+    "rtkernel.c",
+    "clock.c",
+    "main.c",
+]
+
+TARGET = 'main'
+
+Default(env.Program(target = 'main.elf', source = sources))
